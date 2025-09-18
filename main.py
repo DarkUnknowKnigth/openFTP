@@ -123,7 +123,7 @@ class LocalFileService(FileServiceInterface):
 
     def get_available_drives(self):
         if platform.system() == "Windows":
-            return [f"{d}:\" for d in string.ascii_uppercase if os.path.exists(f"{d}:")]
+            return [f"{d}:\\" for d in string.ascii_uppercase if os.path.exists(f"{d}:")]
         return []
 
     def get_user_home(self):
@@ -216,10 +216,6 @@ class FTPClientGUI:
         
         path_label = ttk.Label(controls_frame, text=f"{title}: /", anchor="w", wraplength=400)
         path_label.pack(side="left", fill="x", expand=True, padx=5)
-
-        if title == "Remoto":
-            refresh_button = ttk.Button(controls_frame, text="Refrescar", command=self.refresh_remote_view)
-            refresh_button.pack(side="right", padx=5)
 
         tree = self._create_treeview(frame)
         
@@ -419,4 +415,49 @@ class FTPClientGUI:
             try:
                 self.log(f"Subiendo '{selected_item_id}'...")
                 self.ftp_service.upload_file(local_path, selected_item_id)
-                self.log(f
+                self.log(f"'{selected_item_id}' subido con éxito.")
+                self.master.after(0, self.populate_local_tree)
+            except Exception as e:
+                self.log(f"Error al subir '{selected_item_id}': {e}")
+                self.master.after(0, lambda: messagebox.showerror("Error de Subida", str(e)))
+
+        threading.Thread(target=do_upload, daemon=True).start()
+
+    def download_file(self):
+        selected_item_id = self.remote_tree.focus()
+        if not selected_item_id or not self.ftp_service.is_connected:
+            self.log("Seleccione un archivo remoto y conéctese a un servidor para descargar.")
+            return
+
+        item = self.remote_tree.item(selected_item_id)
+        item_type = item.get("values")[1] if item.get("values") else ""
+
+        if item_type != "Archivo":
+            self.log("Selección no válida. Solo se pueden descargar archivos.")
+            return
+
+        local_path = os.path.join(self.current_local_path, selected_item_id)
+
+        def do_download():
+            try:
+                self.log(f"Descargando '{selected_item_id}'...")
+                self.ftp_service.download_file(selected_item_id, local_path)
+                self.log(f"'{selected_item_id}' descargado con éxito.")
+                self.master.after(0, self.populate_local_tree)
+            except Exception as e:
+                self.log(f"Error al descargar '{selected_item_id}': {e}")
+                self.master.after(0, lambda: messagebox.showerror("Error de Descarga", str(e)))
+
+        threading.Thread(target=do_download, daemon=True).start()
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    
+    # --- Dependency Injection ---
+    ftp_service = FTPService()
+    file_service = LocalFileService()
+    
+    app = FTPClientGUI(root, ftp_service, file_service)
+    
+    root.mainloop()
